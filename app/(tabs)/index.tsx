@@ -51,11 +51,39 @@ export default function Dashboard() {
     checkPermissionStatus();
     const initVoice = async () => {
       const childName = await storage.get('childName') || 'Champion';
-      await VoiceNotifications.onMorningGreeting(childName);
-      await VoiceNotifications.onEveningReminder();
+      
+      // Check if first time opening app
+      const isFirstTime = await storage.get('isFirstTime');
+      if (isFirstTime === null || isFirstTime === true) {
+        await storage.set('isFirstTime', false);
+        const welcomeMsg = `Welcome to Screen Time Tracker! I'm here to help you build healthy digital habits. Let's get started, ${childName}!`;
+        await VoiceNotifications.speak(welcomeMsg, 'normal');
+        await VoiceNotifications.showNotification('👋 Welcome!', welcomeMsg);
+      } else {
+        await VoiceNotifications.onMorningGreeting(childName);
+        await VoiceNotifications.onEveningReminder();
+      }
     };
     initVoice();
   }, []);
+
+  const speakScreenTimeStatus = async () => {
+    const percentage = (currentTotalTime / dailyLimit) * 100;
+    let message = '';
+    
+    if (percentage < 50) {
+      message = `You have used ${currentTotalTime} minutes out of ${dailyLimit} minutes. That's only ${Math.round(percentage)} percent. Great job staying under your limit!`;
+    } else if (percentage < 80) {
+      message = `You have used ${currentTotalTime} minutes out of ${dailyLimit} minutes. That's ${Math.round(percentage)} percent. Watch your time and take breaks!`;
+    } else if (percentage < 100) {
+      message = `You have used ${currentTotalTime} minutes out of ${dailyLimit} minutes. That's ${Math.round(percentage)} percent. You're almost at your limit. Please wrap up soon!`;
+    } else {
+      const overBy = Math.round(currentTotalTime - dailyLimit);
+      message = `Warning! You have exceeded your limit by ${overBy} minutes. You've used ${currentTotalTime} minutes when your limit is ${dailyLimit} minutes. Time to take a break!`;
+    }
+    
+    await VoiceNotifications.speak(message, 'normal');
+  };
 
   useEffect(() => {
     if (hasRealTimePermission && !isTracking) {
@@ -82,25 +110,48 @@ export default function Dashboard() {
     setShowPermission(false);
     await VoiceNotifications.speak('Permission granted! You can now track real usage data.');
   };
-  // Use real-time data if available, otherwise fall back to simulated data
-  const realTimeTotal = getTotalScreenTime() / 60; // Convert seconds to minutes
-  // Always prefer the hook's totalTime as it's already handling real vs demo data
   const currentTotalTime = totalTime;
   const percentage = (currentTotalTime / dailyLimit) * 100;
   
-  console.log('📊 Dashboard - totalTime:', totalTime, 'useRealData:', useRealData, 'hasPermission:', hasPermission);
+  console.log('📊 Dashboard Update:');
+  console.log('  Total Time:', currentTotalTime, 'mins');
+  console.log('  Daily Limit:', dailyLimit, 'mins');
+  console.log('  Percentage:', percentage.toFixed(1), '%');
+  console.log('  Real Data:', useRealData, '| Permission:', hasPermission);
+  
+  // Show last update time
+  const [lastUpdateTime, setLastUpdateTime] = React.useState(new Date());
 
-  // Check usage and trigger voice notifications
+  // Update timestamp when screen time changes
+  useEffect(() => {
+    setLastUpdateTime(new Date());
+  }, [currentTotalTime]);
+
+  // Check usage and trigger voice + notifications
   useEffect(() => {
     if (currentTotalTime > 0) {
       VoiceNotifications.checkAndNotify(currentTotalTime, dailyLimit);
+      
+      // Show status bar reminder every 30 mins
+      const lastReminder = Math.floor(currentTotalTime / 30);
+      const currentReminder = Math.floor(currentTotalTime / 30);
+      if (lastReminder !== currentReminder && currentTotalTime % 30 === 0) {
+        const remaining = Math.max(0, dailyLimit - currentTotalTime);
+        VoiceNotifications.showNotification(
+          '⏰ Screen Time Reminder',
+          `You've used ${currentTotalTime} mins. ${remaining} mins remaining.`
+        );
+      }
     }
   }, [currentTotalTime, dailyLimit]);
 
   const getStatusMessage = () => {
+    console.log('  Status Check: percentage =', percentage);
     if (percentage < 50) return { text: "Great job! 🌟", color: Colors.success };
     if (percentage < 80) return { text: "Watch your time ⚠️", color: Colors.warning };
-    return { text: "Limit reached! 🚫", color: Colors.danger };
+    if (percentage < 100) return { text: "Almost at limit! ⚠️", color: Colors.warning };
+    const overBy = Math.round(currentTotalTime - dailyLimit);
+    return { text: `Over limit by ${overBy}m! 🚫`, color: Colors.danger };
   };
 
   const status = getStatusMessage();
@@ -150,17 +201,44 @@ export default function Dashboard() {
       <BlockStatus />
       <LiveUsageIndicator />
 
-      <Card style={styles.petCard}>
-        <VirtualPet timeSpent={currentTotalTime} limit={dailyLimit} />
-      </Card>
+      <TouchableOpacity onPress={async () => {
+        const petMood = currentTotalTime < dailyLimit * 0.5 ? 'happy' : 
+                        currentTotalTime < dailyLimit * 0.8 ? 'okay' : 
+                        currentTotalTime < dailyLimit ? 'worried' : 'sad';
+        await VoiceNotifications.onPetInteraction(petMood);
+      }}>
+        <Card style={styles.petCard}>
+          <VirtualPet timeSpent={currentTotalTime} limit={dailyLimit} />
+        </Card>
+      </TouchableOpacity>
 
-      <Card style={styles.mainCard}>
-        <Text style={styles.cardTitle}>Today's Screen Time</Text>
-        <ScreenTimeCircle timeSpent={currentTotalTime} limit={dailyLimit} />
-        <View style={[styles.statusBadge, { backgroundColor: status.color }]}>
-          <Text style={styles.statusText}>{status.text}</Text>
+      {/* Live Tracking Indicator */}
+      {useRealData && hasPermission && (
+        <View style={styles.liveTrackingBadge}>
+          <View style={styles.pulseDot} />
+          <Ionicons name="pulse" size={16} color={Colors.success} />
+          <Text style={styles.liveTrackingText}>
+            LIVE TRACKING • Updated {lastUpdateTime.toLocaleTimeString('en-US', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              second: '2-digit'
+            })}
+          </Text>
         </View>
-      </Card>
+      )}
+
+      <TouchableOpacity onPress={speakScreenTimeStatus}>
+        <Card style={styles.mainCard}>
+          <Text style={styles.cardTitle}>Today's Screen Time</Text>
+          <Text style={styles.cardSubtitle}>
+            {useRealData ? 'Tap to hear your status' : 'Waiting for permission...'}
+          </Text>
+          <ScreenTimeCircle timeSpent={currentTotalTime} limit={dailyLimit} />
+          <View style={[styles.statusBadge, { backgroundColor: status.color }]}>
+            <Text style={styles.statusText}>{status.text}</Text>
+          </View>
+        </Card>
+      </TouchableOpacity>
 
       <View style={styles.statsGrid}>
         <Card style={styles.statCard}>
@@ -275,6 +353,35 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginLeft: 6,
   },
+  liveTrackingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    marginBottom: 16,
+    gap: 6,
+    shadowColor: Colors.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.success,
+    marginRight: 4,
+  },
+  liveTrackingText: {
+    color: Colors.success,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   mainCard: {
     marginHorizontal: 20,
     marginBottom: 20,
@@ -285,7 +392,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: Colors.text,
-    marginBottom: 20,
+    marginBottom: 4,
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    color: Colors.textLight,
+    marginBottom: 16,
   },
   statusBadge: {
     paddingHorizontal: 20,

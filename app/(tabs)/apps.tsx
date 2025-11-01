@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } 
 import { AppUsageItem } from '../../components/AppUsageItem';
 import { BackButton } from '../../components/BackButton';
 import { Card } from '../../components/ui/Card';
+import { DetailedUsageView } from '../../components/DetailedUsageView';
 import { Colors } from '../../constants/theme';
 import { useAppUsage } from '../../hooks/useAppUsage';
 import { useRealTimeUsage } from '../../hooks/useRealTimeUsage';
@@ -13,6 +14,7 @@ export default function Apps() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [useLiveData, setUseLiveData] = useState(true);
+  const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
   const { apps, totalTime, hasPermission: hasAppPermission, requestPermission, useRealData } = useAppUsage();
   const { getTopApps, getTotalScreenTime, hasPermission, requestPermission: requestRealTimePermission } = useRealTimeUsage();
 
@@ -69,21 +71,30 @@ export default function Apps() {
     return colors[Math.floor(Math.random() * colors.length)];
   };
   
-  const generateDemoApps = () => [
-    { name: 'YouTube', icon: '📺', timeSpent: 45, color: '#FF6B6B', packageName: 'demo' },
-    { name: 'Instagram', icon: '💬', timeSpent: 32, color: '#4ECDC4', packageName: 'demo' },
-    { name: 'WhatsApp', icon: '💬', timeSpent: 28, color: '#FFE66D', packageName: 'demo' },
-    { name: 'Chrome', icon: '🌐', timeSpent: 22, color: '#95E1D3', packageName: 'demo' },
-    { name: 'TikTok', icon: '📱', timeSpent: 18, color: '#C7CEEA', packageName: 'demo' },
-  ];
-  
-  const getDemoTotal = () => 145;
-  
-  // Decide which data to show based on toggle
-  const shouldShowLiveData = useLiveData && (hasPermission || hasAppPermission);
-  
-  const displayApps = shouldShowLiveData ? apps : generateDemoApps();
-  const displayTotal = shouldShowLiveData ? totalTime : getDemoTotal();
+  // ALWAYS show real data from device - no demo mode
+  const displayApps = apps;
+  const displayTotal = totalTime;
+
+  // If detailed view is selected, show the Digital Wellbeing-like interface
+  if (viewMode === 'detailed') {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.title}>Detailed Usage</Text>
+            <Text style={styles.subtitle}>Digital Wellbeing insights</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.viewToggle}
+            onPress={() => setViewMode('simple')}
+          >
+            <Ionicons name="list" size={20} color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
+        <DetailedUsageView />
+      </View>
+    );
+  }
 
   return (
     <ScrollView 
@@ -97,56 +108,27 @@ export default function Apps() {
           <Text style={styles.title}>App Usage</Text>
           <Text style={styles.subtitle}>Track your daily app activity</Text>
         </View>
-        <View style={styles.updateBadge}>
-          <Ionicons name="sync" size={12} color={Colors.success} />
-          <Text style={styles.updateText}>
-            {lastUpdate.toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit',
-              second: '2-digit'
-            })}
-          </Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.viewToggle}
+            onPress={() => setViewMode('detailed')}
+          >
+            <Ionicons name="analytics" size={20} color={Colors.primary} />
+          </TouchableOpacity>
+          <View style={styles.updateBadge}>
+            <Ionicons name="sync" size={12} color={Colors.success} />
+            <Text style={styles.updateText}>
+              {lastUpdate.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                second: '2-digit'
+              })}
+            </Text>
+          </View>
         </View>
       </View>
 
-      {/* Data Mode Toggle */}
-      <View style={styles.toggleContainer}>
-        <TouchableOpacity 
-          style={[styles.toggleButton, !useLiveData && styles.toggleButtonActive]}
-          onPress={() => setUseLiveData(false)}
-        >
-          <Ionicons 
-            name="eye-outline" 
-            size={16} 
-            color={!useLiveData ? '#fff' : Colors.textLight} 
-          />
-          <Text style={[styles.toggleText, !useLiveData && styles.toggleTextActive]}>
-            Demo Mode
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.toggleButton, useLiveData && styles.toggleButtonActive]}
-          onPress={() => {
-            setUseLiveData(true);
-            if (!hasPermission && !hasAppPermission) {
-              requestPermission();
-              requestRealTimePermission();
-            }
-          }}
-        >
-          <Ionicons 
-            name="pulse" 
-            size={16} 
-            color={useLiveData ? '#fff' : Colors.textLight} 
-          />
-          <Text style={[styles.toggleText, useLiveData && styles.toggleTextActive]}>
-            Live Usage {shouldShowLiveData && '✓'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {useLiveData && !hasPermission && !hasAppPermission && (
+      {!hasPermission && !hasAppPermission && (
         <TouchableOpacity 
           style={styles.permissionBanner} 
           onPress={async () => {
@@ -163,7 +145,7 @@ export default function Apps() {
       )}
 
       {/* Status Badge */}
-      {shouldShowLiveData && (
+      {(hasPermission || hasAppPermission) && (
         <View style={styles.liveStatusBadge}>
           <Ionicons name="radio" size={16} color={Colors.success} />
           <Text style={styles.liveStatusText}>
@@ -171,17 +153,8 @@ export default function Apps() {
           </Text>
         </View>
       )}
-      
-      {!shouldShowLiveData && !useLiveData && (
-        <View style={styles.demoStatusBadge}>
-          <Ionicons name="eye-outline" size={16} color={Colors.warning} />
-          <Text style={styles.demoStatusText}>
-            DEMO MODE • Switch to Live Usage to see your real data
-          </Text>
-        </View>
-      )}
 
-      {displayApps.length === 0 && shouldShowLiveData && (
+      {displayApps.length === 0 && (hasPermission || hasAppPermission) && (
         <Card style={styles.emptyCard}>
           <Ionicons name="apps-outline" size={64} color={Colors.textLight} />
           <Text style={styles.emptyTitle}>No App Usage Data Yet</Text>
@@ -239,6 +212,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  viewToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   title: {
     fontSize: 28,

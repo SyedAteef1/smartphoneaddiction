@@ -1,7 +1,9 @@
 import * as Speech from 'expo-speech';
 import * as SMS from 'expo-sms';
 import { storage } from './storage';
-import { Platform } from 'react-native';
+import { Platform, NativeModules, AppState } from 'react-native';
+
+const { NotificationModule } = NativeModules;
 
 interface VoiceSettings {
   enabled: boolean;
@@ -19,14 +21,28 @@ export const VoiceNotifications = {
     const settings = await VoiceNotifications.getSettings();
     if (!settings.enabled) return;
 
-    const pitchMap = { low: 0.9, normal: 1.0, high: 1.1 };
-    const rateMap = { low: 0.85, normal: 0.9, high: 0.95 };
+    // Only speak if app is in foreground
+    if (AppState.currentState === 'active') {
+      const pitchMap = { low: 0.9, normal: 1.0, high: 1.1 };
+      const rateMap = { low: 0.85, normal: 0.9, high: 0.95 };
 
-    await Speech.speak(message, {
-      language: settings.language,
-      pitch: pitchMap[priority],
-      rate: rateMap[priority],
-    });
+      await Speech.speak(message, {
+        language: settings.language,
+        pitch: pitchMap[priority],
+        rate: rateMap[priority],
+      });
+    }
+  },
+
+  // Show notification (works even when app is closed)
+  showNotification: async (title: string, message: string) => {
+    if (Platform.OS === 'android' && NotificationModule) {
+      try {
+        await NotificationModule.showNotification(title, message);
+      } catch (e) {
+        console.error('Notification error:', e);
+      }
+    }
   },
 
   stopSpeaking: () => {
@@ -59,13 +75,21 @@ export const VoiceNotifications = {
     const percentage = (timeSpent / limit) * 100;
     
     if (percentage >= 50 && percentage < 60 && VoiceNotifications.shouldNotify('50percent', 300000)) {
-      await VoiceNotifications.speak('You have used half of your daily screen time. Great job staying aware!', 'normal');
+      const msg = 'You have used half of your daily screen time. Great job staying aware!';
+      await VoiceNotifications.speak(msg, 'normal');
+      await VoiceNotifications.showNotification('Screen Time Alert', msg);
     } else if (percentage >= 75 && percentage < 85 && VoiceNotifications.shouldNotify('75percent', 300000)) {
-      await VoiceNotifications.speak('You have used 75% of your daily limit. Consider wrapping up soon.', 'normal');
+      const msg = 'You have used 75% of your daily limit. Consider wrapping up soon.';
+      await VoiceNotifications.speak(msg, 'normal');
+      await VoiceNotifications.showNotification('Screen Time Warning', msg);
     } else if (percentage >= 90 && percentage < 100 && VoiceNotifications.shouldNotify('90percent', 180000)) {
-      await VoiceNotifications.speak('Warning! Only 10% of your screen time remaining. Please finish your activities.', 'high');
+      const msg = 'Warning! Only 10% of your screen time remaining. Please finish your activities.';
+      await VoiceNotifications.speak(msg, 'high');
+      await VoiceNotifications.showNotification('⚠️ Screen Time Alert', msg);
     } else if (percentage >= 100 && VoiceNotifications.shouldNotify('100percent', 300000)) {
-      await VoiceNotifications.speak('Daily screen time limit reached! Time to take a break and do something else.', 'high');
+      const msg = 'Daily screen time limit reached! Time to take a break and do something else.';
+      await VoiceNotifications.speak(msg, 'high');
+      await VoiceNotifications.showNotification('🚫 Limit Reached', msg);
       await VoiceNotifications.alertParent(timeSpent, limit);
     }
   },

@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NativeModules, Platform } from 'react-native';
 import { AppBlocker } from '../utils/appBlocker';
-import { DeviceUsageTracker } from '../utils/deviceUsage';
 import { RealTimeTracker } from '../utils/realTimeTracker';
-import { ScreenTimeSync } from '../utils/screenTimeSync';
 import { storage } from '../utils/storage';
 import { VoiceNotifications } from '../utils/voiceNotifications';
 
@@ -30,12 +28,10 @@ export const useAppUsage = () => {
     RealTimeTracker.startTracking();
   }, []);
   
-  // Set up auto-refresh interval when we have permission and real data
   useEffect(() => {
     if (!hasPermission || !useRealData) return;
     
     console.log('🔄 Setting up auto-refresh every 10 seconds');
-    // Refresh every 10 seconds for more dynamic updates
     const interval = setInterval(() => {
       console.log('🔄 Auto-refreshing usage data...');
       fetchRealUsage();
@@ -47,7 +43,6 @@ export const useAppUsage = () => {
     };
   }, [hasPermission, useRealData]);
   
-  // Fetch data immediately when permission is granted
   useEffect(() => {
     if (hasPermission && useRealData) {
       console.log('🔄 Permission granted, fetching real usage data...');
@@ -56,17 +51,14 @@ export const useAppUsage = () => {
   }, [hasPermission, useRealData]);
 
   const initializeData = async () => {
-    const supported = await DeviceUsageTracker.isSupported();
-    if (supported && UsageStatsModule) {
+    if (Platform.OS === 'android' && UsageStatsModule) {
       const permission = await checkPermission();
       setHasPermission(permission);
       if (permission) {
         setUseRealData(true);
         await fetchRealUsage();
-        return;
       }
     }
-    await loadData();
   };
 
   const checkPermission = async (): Promise<boolean> => {
@@ -89,7 +81,6 @@ export const useAppUsage = () => {
         console.log('🔓 Requesting permission...');
         await UsageStatsModule.requestUsageStatsPermission();
         
-        // Give user time to grant permission before checking
         setTimeout(async () => {
           const granted = await UsageStatsModule.hasUsageStatsPermission();
           console.log('🔓 Permission granted:', granted);
@@ -108,105 +99,40 @@ export const useAppUsage = () => {
   const fetchRealUsage = async () => {
     if (!UsageStatsModule) return;
     try {
-      const startTime = new Date().setHours(0, 0, 0, 0);
+      const calendar = new Date();
+      calendar.setHours(0, 0, 0, 0);
+      const startTime = calendar.getTime();
       const endTime = Date.now();
-      const statsMap = await UsageStatsModule.queryUsageStats(startTime, endTime);
       
-      console.log('📊 ======================');
-      console.log('📊 FETCHING REAL USAGE DATA');
-      console.log('📊 Time range: Today from', new Date(startTime).toLocaleTimeString(), 'to', new Date(endTime).toLocaleTimeString());
-      console.log('📊 Raw stats received:', Object.keys(statsMap || {}).length, 'apps');
+      const statsArray = await UsageStatsModule.getUsageStats(startTime, endTime);
       
-      // Convert object/map to array
-      const statsArray = Object.values(statsMap || {});
-      console.log('📊 Stats array length:', statsArray.length);
-      
-      const mappedApps = statsArray.map((stat: any) => ({
-        name: stat.packageName.split('.').pop() || stat.packageName,
-        icon: getCategoryIcon(stat.packageName),
-        timeSpent: Math.floor(stat.totalTime / 60000), // Convert ms to minutes
-        color: getRandomColor(),
-        packageName: stat.packageName,
-      })).filter((app: AppUsage) => app.timeSpent > 0)
-        .sort((a, b) => b.timeSpent - a.timeSpent); // Sort by most used
-      
-      console.log('📊 Mapped apps:', mappedApps.length, mappedApps.slice(0, 5));
+      const mappedApps = statsArray
+        .map((stat: any) => ({
+          name: stat.appName || formatPackageName(stat.packageName),
+          icon: getCategoryIcon(stat.packageName),
+          timeSpent: Math.floor(stat.totalTimeInForeground / 60000),
+          color: getRandomColor(),
+          packageName: stat.packageName,
+        }))
+        .filter((app: AppUsage) => app.timeSpent > 0)
+        .sort((a, b) => b.timeSpent - a.timeSpent);
       
       const newTotal = mappedApps.reduce((sum: number, app: AppUsage) => sum + app.timeSpent, 0);
       
-      // Log if data changed
-      const dataChanged = mappedApps.length !== apps.length || newTotal !== totalTime;
-      if (dataChanged) {
-        console.log('🔄 DATA CHANGED!');
-        console.log('  Apps: ', apps.length, '->', mappedApps.length);
-        console.log('  Time: ', totalTime, '->', newTotal, 'minutes');
-        console.log('  Top 3 apps:', mappedApps.slice(0, 3).map(a => `${a.name}:${a.timeSpent}m`));
-      }
+      console.log('✅', mappedApps.length, 'apps,', newTotal, 'min total');
       
       setApps(mappedApps);
       setTotalTime(newTotal);
-      console.log('✅ Apps updated:', mappedApps.length, 'Total time:', newTotal, 'minutes');
       
       await VoiceNotifications.checkAndNotify(newTotal, dailyLimit);
       await AppBlocker.checkAndBlock(newTotal, dailyLimit);
-      // Save today's data
-      await storage.set('todayApps', mappedApps);
-      await storage.set('todayTime', newTotal);
-      await storage.set('lastSaveDate', new Date().toDateString());
     } catch (e) {
-      console.error('Failed to fetch real usage:', e);
-      await loadData();
+      console.error('❌', e);
     }
   };
-
-  const loadData = async () => {
-    await loadDynamicData();
-  };
-
-  const loadDynamicData = async () => {
-    // First check for imported Screen Time data
-    const screenTimeData = await ScreenTimeSync.getTodayData();
-    
-    if (screenTimeData) {
-      // Use imported data
-      setApps(screenTimeData.apps);
-      setTotalTime(screenTimeData.totalUsage);
-    } else {
-      // Check if we have saved data from today
-      const savedApps = await storage.get('todayApps');
-      const savedTime = await storage.get('todayTime');
-      const savedDate = await storage.get('lastSaveDate');
-      const today = new Date().toDateString();
-      
-      if (savedDate === today && savedApps && savedTime !== null) {
-        // Use saved data from today
-        setApps(savedApps);
-        setTotalTime(savedTime);
-      } else {
-        // New day - start fresh
-        const initial = generateInitialApps();
-        setApps(initial);
-        setTotalTime(0);
-        await storage.set('lastSaveDate', today);
-        await storage.set('todayApps', initial);
-        await storage.set('todayTime', 0);
-      }
-    }
-    
-    const savedLimit = await storage.get('dailyLimit') || 120;
-    const savedPoints = await storage.get('points') || 0;
-    setDailyLimit(savedLimit);
-    setPoints(savedPoints);
-  };
-
-
 
   const resetDaily = async () => {
     await RealTimeTracker.resetDaily();
-    // Clear today's data
-    await storage.set('todayApps', []);
-    await storage.set('todayTime', 0);
-    await storage.set('lastSaveDate', new Date().toDateString());
     setApps([]);
     setTotalTime(0);
   };
@@ -230,29 +156,25 @@ export const useAppUsage = () => {
     return 'sad';
   };
 
-  const importScreenTime = async (minutes: number, appData: any[]) => {
-    const success = await ScreenTimeSync.importFromScreenTime(minutes, appData);
-    if (success) {
-      setUseRealData(false);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await loadDynamicData();
-    }
-  };
-
-  return { apps, totalTime, dailyLimit, points, resetDaily, updateLimit, addPoints, hasPermission, requestPermission, useRealData, getPetMood, importScreenTime };
+  return { apps, totalTime, dailyLimit, points, resetDaily, updateLimit, addPoints, hasPermission, requestPermission, useRealData, getPetMood };
 };
 
-const generateInitialApps = (): AppUsage[] => {
-  // Start with 0 usage - will increment as user actually uses the app
-  return [];
+const formatPackageName = (packageName: string): string => {
+  const parts = packageName.split('.');
+  if (parts.length === 0) return packageName;
+  const name = parts[parts.length - 1];
+  return name.charAt(0).toUpperCase() + name.slice(1);
 };
 
 const getCategoryIcon = (packageName: string): string => {
-  if (packageName.includes('game')) return '🎮';
-  if (packageName.includes('social') || packageName.includes('chat')) return '💬';
-  if (packageName.includes('video') || packageName.includes('youtube')) return '📺';
-  if (packageName.includes('browser') || packageName.includes('chrome')) return '🌐';
-  if (packageName.includes('music') || packageName.includes('spotify')) return '🎵';
+  const pkg = packageName.toLowerCase();
+  if (pkg.includes('game')) return '🎮';
+  if (pkg.includes('social') || pkg.includes('chat') || pkg.includes('whatsapp') || pkg.includes('messenger')) return '💬';
+  if (pkg.includes('video') || pkg.includes('youtube') || pkg.includes('netflix')) return '📺';
+  if (pkg.includes('browser') || pkg.includes('chrome')) return '🌐';
+  if (pkg.includes('music') || pkg.includes('spotify')) return '🎵';
+  if (pkg.includes('camera') || pkg.includes('photo') || pkg.includes('instagram')) return '📷';
+  if (pkg.includes('mail') || pkg.includes('gmail')) return '📧';
   return '📱';
 };
 

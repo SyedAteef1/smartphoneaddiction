@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { VoiceNotifications } from '../../utils/voiceNotifications';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Colors } from '../../constants/theme';
-import { Card } from '../../components/ui/Card';
-import { BackButton } from '../../components/BackButton';
 import { Ionicons } from '@expo/vector-icons';
-import { MemoryGame } from '../../components/games/MemoryGame';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from 'react';
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BackButton } from '../../components/BackButton';
 import { BreathingGame } from '../../components/games/BreathingGame';
 import { MathQuiz } from '../../components/games/MathQuiz';
+import { MemoryGame } from '../../components/games/MemoryGame';
+import { MindfulnessGarden } from '../../components/games/MindfulnessGarden';
+import { PatternPuzzle } from '../../components/games/PatternPuzzle';
+import { Card } from '../../components/ui/Card';
+import { Colors } from '../../constants/theme';
+import { VoiceNotifications } from '../../utils/voiceNotifications';
 
 export default function Games() {
   const [activeGame, setActiveGame] = useState<string | null>(null);
@@ -21,6 +23,22 @@ export default function Games() {
   }, []);
 
   const games = [
+    {
+      id: 'pattern',
+      title: 'Pattern Puzzle',
+      icon: '🧩',
+      description: 'Solve pattern sequences to boost IQ and logical thinking',
+      benefit: 'Increases IQ & logic',
+      color: '#9C27B0',
+    },
+    {
+      id: 'mindfulness',
+      title: 'Mindfulness Garden',
+      icon: '🌸',
+      description: 'Practice breathing, gratitude, and meditation for inner peace',
+      benefit: 'Improves mental health',
+      color: '#4CAF50',
+    },
     {
       id: 'memory',
       title: 'Memory Match',
@@ -144,6 +162,34 @@ export default function Games() {
         }}
       >
         <MathQuiz onClose={() => {
+          VoiceNotifications.stopSpeaking();
+          setActiveGame(null);
+        }} />
+      </Modal>
+
+      <Modal 
+        visible={activeGame === 'pattern'} 
+        animationType="slide"
+        onRequestClose={() => {
+          VoiceNotifications.stopSpeaking();
+          setActiveGame(null);
+        }}
+      >
+        <PatternPuzzle onClose={() => {
+          VoiceNotifications.stopSpeaking();
+          setActiveGame(null);
+        }} />
+      </Modal>
+
+      <Modal 
+        visible={activeGame === 'mindfulness'} 
+        animationType="slide"
+        onRequestClose={() => {
+          VoiceNotifications.stopSpeaking();
+          setActiveGame(null);
+        }}
+      >
+        <MindfulnessGarden onClose={() => {
           VoiceNotifications.stopSpeaking();
           setActiveGame(null);
         }} />

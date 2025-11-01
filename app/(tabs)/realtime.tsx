@@ -2,28 +2,19 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/theme';
-import { RealTimeUsageDisplay } from '../../components/RealTimeUsageDisplay';
-import { useRealTimeUsage } from '../../hooks/useRealTimeUsage';
+import { useAppUsage } from '../../hooks/useAppUsage';
 import { Ionicons } from '@expo/vector-icons';
+import { Card } from '../../components/ui/Card';
+import { AppUsageItem } from '../../components/AppUsageItem';
 
 export default function RealTimeScreen() {
-  const {
-    hasPermission,
-    isTracking,
-    loading,
-    requestPermission,
-    startTracking,
-    stopTracking,
-  } = useRealTimeUsage();
-
+  const { apps, totalTime, hasPermission, requestPermission } = useAppUsage();
   const [refreshing, setRefreshing] = React.useState(false);
+  const [lastUpdate, setLastUpdate] = React.useState(new Date());
 
   useEffect(() => {
-    // Auto-start tracking when permission is granted
-    if (hasPermission && !isTracking) {
-      startTracking();
-    }
-  }, [hasPermission]);
+    setLastUpdate(new Date());
+  }, [apps, totalTime]);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -32,13 +23,7 @@ export default function RealTimeScreen() {
     }, 1000);
   }, []);
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
+
 
   if (!hasPermission) {
     return (
@@ -106,24 +91,53 @@ export default function RealTimeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Real-Time Usage</Text>
-            <Text style={styles.subtitle}>Live tracking of your screen time</Text>
+            <Text style={styles.subtitle}>Updates every 10 seconds</Text>
           </View>
-          
-          <TouchableOpacity 
-            style={styles.trackingButton}
-            onPress={isTracking ? stopTracking : startTracking}
-          >
-            <Ionicons 
-              name={isTracking ? 'pause' : 'play'} 
-              size={20} 
-              color="#fff" 
-            />
-          </TouchableOpacity>
+          <View style={styles.updateBadge}>
+            <Ionicons name="sync" size={12} color={Colors.success} />
+            <Text style={styles.updateText}>
+              {lastUpdate.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                second: '2-digit'
+              })}
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.content}>
-          <RealTimeUsageDisplay />
+        <View style={styles.liveStatusBadge}>
+          <View style={styles.pulseDot} />
+          <Ionicons name="radio" size={16} color={Colors.success} />
+          <Text style={styles.liveStatusText}>LIVE TRACKING ACTIVE</Text>
         </View>
+
+        <Card style={styles.summaryCard}>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{apps.length}</Text>
+              <Text style={styles.summaryLabel}>Apps Used</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{Math.round(totalTime)}m</Text>
+              <Text style={styles.summaryLabel}>Total Time</Text>
+            </View>
+          </View>
+        </Card>
+
+        <Card style={styles.listCard}>
+          <Text style={styles.sectionTitle}>Live App Breakdown</Text>
+          {apps.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="apps-outline" size={48} color={Colors.textLight} />
+              <Text style={styles.emptyText}>No app usage yet today</Text>
+            </View>
+          ) : (
+            apps.map((app, index) => (
+              <AppUsageItem key={index} app={app} totalTime={totalTime} />
+            ))
+          )}
+        </Card>
 
         {/* Info Card */}
         <View style={styles.infoCard}>
@@ -149,15 +163,89 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  updateBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
   },
-  loadingText: {
-    fontSize: 16,
+  updateText: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  liveStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 16,
+    gap: 6,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.success,
+  },
+  liveStatusText: {
+    color: Colors.success,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  summaryCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  summaryItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  summaryValue: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: Colors.primary,
+    marginBottom: 4,
+  },
+  summaryLabel: {
+    fontSize: 12,
     color: Colors.textLight,
+  },
+  divider: {
+    width: 1,
+    backgroundColor: Colors.border,
+  },
+  listCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 16,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.textLight,
+    marginTop: 12,
   },
   permissionContainer: {
     flex: 1,
@@ -235,19 +323,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255,255,255,0.9)',
   },
-  trackingButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.5)',
-  },
-  content: {
-    paddingHorizontal: 20,
-  },
+
   infoCard: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255,255,255,0.95)',

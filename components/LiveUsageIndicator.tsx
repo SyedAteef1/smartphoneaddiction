@@ -75,7 +75,7 @@ export const LiveUsageIndicator: React.FC = () => {
         <Text style={styles.label}>LIVE NOW</Text>
         <Text style={styles.text} numberOfLines={1}>
           {currentApp}
-        </Text>
+      </Text>
         <Text style={styles.time}>{timeDisplay}</Text>
       </View>
       {hasPermission && (

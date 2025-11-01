@@ -53,35 +53,22 @@ export const useRealTimeUsage = () => {
 
   const requestPermission = async () => {
     try {
-      console.log('🔹 requestPermission called');
-      console.log('🔹 Platform:', Platform.OS);
-      console.log('🔹 UsageStatsModule:', UsageStatsModule);
-      
-      if (Platform.OS === 'android') {
-        if (!UsageStatsModule) {
-          console.error('❌ UsageStatsModule is NULL - Native module not loaded!');
-          alert('Native module not found. Please rebuild the app.');
-          return;
-        }
-        
-        console.log('✅ Calling UsageStatsModule.requestUsageStatsPermission()');
+      if (Platform.OS === 'android' && UsageStatsModule) {
         await UsageStatsModule.requestUsageStatsPermission();
-        console.log('✅ Permission request sent, checking after 1 second...');
-        
         // Check permission again after user returns from settings
         setTimeout(checkPermission, 1000);
       }
     } catch (error) {
-      console.error('❌ Error requesting usage stats permission:', error);
-      alert('Error: ' + (error as Error).message);
+      console.error('Error requesting usage stats permission:', error);
     }
   };
 
   const startTracking = async () => {
     try {
       if (Platform.OS === 'android' && UsageStatsModule && hasPermission) {
-        await UsageStatsModule.startUsageTracking();
+        // Use polling-based tracking with getUsageStats instead of service-based tracking
         setIsTracking(true);
+        console.log('✅ Real-time tracking enabled (polling-based)');
       }
     } catch (error) {
       console.error('Error starting usage tracking:', error);
@@ -91,8 +78,8 @@ export const useRealTimeUsage = () => {
   const stopTracking = async () => {
     try {
       if (Platform.OS === 'android' && UsageStatsModule) {
-        await UsageStatsModule.stopUsageTracking();
         setIsTracking(false);
+        console.log('⏸️ Real-time tracking stopped');
       }
     } catch (error) {
       console.error('Error stopping usage tracking:', error);
