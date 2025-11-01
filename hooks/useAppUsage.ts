@@ -99,27 +99,80 @@ export const useAppUsage = () => {
   const fetchRealUsage = async () => {
     if (!UsageStatsModule) return;
     try {
+      // Get today from midnight (12:00 AM)
+      const now = new Date();
       const calendar = new Date();
       calendar.setHours(0, 0, 0, 0);
+      calendar.setMinutes(0);
+      calendar.setSeconds(0);
+      calendar.setMilliseconds(0);
       const startTime = calendar.getTime();
-      const endTime = Date.now();
+      const endTime = now.getTime();
       
-      const statsArray = await UsageStatsModule.getUsageStats(startTime, endTime);
+      console.log('📊 Fetching today\'s usage from', new Date(startTime).toLocaleString(), 'to', new Date(endTime).toLocaleString());
       
-      const mappedApps = statsArray
-        .map((stat: any) => ({
-          name: stat.appName || formatPackageName(stat.packageName),
-          icon: getCategoryIcon(stat.packageName),
-          timeSpent: Math.floor(stat.totalTimeInForeground / 60000),
+      // Use getUsageEvents for accurate day-based tracking
+      const rawEvents = await UsageStatsModule.getUsageEvents(startTime, endTime);
+      console.log('📊 Received', rawEvents.length, 'events');
+      
+      // Process events to calculate screen time
+      const appUsage: { [key: string]: { name: string; timeSpent: number; packageName: string } } = {};
+      let foregroundApp: string | null = null;
+      let foregroundStartTime: number = 0;
+      
+      rawEvents.forEach((event: any) => {
+        const { packageName, appName, timestamp, eventType } = event;
+        
+        // Initialize app entry
+        if (!appUsage[packageName]) {
+          appUsage[packageName] = {
+            name: appName || formatPackageName(packageName),
+            timeSpent: 0,
+            packageName: packageName,
+          };
+        }
+        
+        // MOVE_TO_FOREGROUND (1) or MOVE_TO_BACKGROUND (2)
+        if (eventType === 1) { // MOVE_TO_FOREGROUND
+          // Close previous app if one was open
+          if (foregroundApp && foregroundStartTime) {
+            const duration = timestamp - foregroundStartTime;
+            appUsage[foregroundApp].timeSpent += duration;
+          }
+          foregroundApp = packageName;
+          foregroundStartTime = timestamp;
+        } else if (eventType === 2 && packageName === foregroundApp) { // MOVE_TO_BACKGROUND
+          if (foregroundStartTime) {
+            const duration = timestamp - foregroundStartTime;
+            appUsage[foregroundApp].timeSpent += duration;
+          }
+          foregroundApp = null;
+          foregroundStartTime = 0;
+        }
+      });
+      
+      // Handle current session if app is still foreground
+      if (foregroundApp && foregroundStartTime) {
+        const duration = endTime - foregroundStartTime;
+        appUsage[foregroundApp].timeSpent += duration;
+      }
+      
+      // Convert to array and format
+      const mappedApps = Object.values(appUsage)
+        .map((app) => ({
+          name: app.name,
+          icon: getCategoryIcon(app.packageName),
+          timeSpent: Math.floor(app.timeSpent / 60000), // Convert ms to minutes
           color: getRandomColor(),
-          packageName: stat.packageName,
+          packageName: app.packageName,
         }))
         .filter((app: AppUsage) => app.timeSpent > 0)
         .sort((a, b) => b.timeSpent - a.timeSpent);
       
       const newTotal = mappedApps.reduce((sum: number, app: AppUsage) => sum + app.timeSpent, 0);
       
-      console.log('✅', mappedApps.length, 'apps,', newTotal, 'min total');
+      console.log('✅ Today\'s usage:', mappedApps.length, 'apps,', newTotal, 'min total');
+      console.log('📊 Top 3:', mappedApps.slice(0, 3).map(a => `${a.name}: ${a.timeSpent}m`));
       
       setApps(mappedApps);
       setTotalTime(newTotal);
