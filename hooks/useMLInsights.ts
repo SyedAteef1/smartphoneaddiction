@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { mlService, MLInsights, Predictions, BehaviorInsights } from '../utils/mlService';
+import { mlService, MLInsights, Predictions, BehaviorInsights, RecommendationItem, AddictionInsights } from '../utils/mlService';
 
 export const useMLInsights = () => {
   const [insights, setInsights] = useState<MLInsights | null>(null);
   const [predictions, setPredictions] = useState<Predictions | null>(null);
   const [behaviorInsights, setBehaviorInsights] = useState<BehaviorInsights | null>(null);
-  const [recommendations, setRecommendations] = useState<string[]>([]);
+  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
+  const [addictionInsights, setAddictionInsights] = useState<AddictionInsights | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [realTimeInsights, setRealTimeInsights] = useState<any>(null);
@@ -77,6 +78,22 @@ export const useMLInsights = () => {
     }
   }, []);
 
+  const fetchAddictionInsights = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const result = await mlService.getAddictionInsights();
+      if (result) {
+        setAddictionInsights(result);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch addiction insights');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const optimizeBreaks = useCallback(async (currentUsage: number, dailyPattern: number[]) => {
     try {
       setIsLoading(true);
@@ -124,6 +141,7 @@ export const useMLInsights = () => {
     predictions,
     behaviorInsights,
     recommendations,
+    addictionInsights,
     realTimeInsights,
     isLoading,
     error,
@@ -131,6 +149,7 @@ export const useMLInsights = () => {
     fetchPredictions,
     fetchBehaviorInsights,
     fetchRecommendations,
+    fetchAddictionInsights,
     optimizeBreaks
   };
 };

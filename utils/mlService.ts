@@ -4,9 +4,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 const ML_API_BASE = Platform.select({
-  android: 'http://10.0.2.2:8000/api',  // Android emulator
-  ios: 'http://localhost:8000/api',      // iOS simulator
-  default: 'http://localhost:8000/api'
+  android: 'http://10.54.50.182:8001/api',  // Your local network IP
+  ios: 'http://localhost:8001/api',      // iOS simulator
+  default: 'http://localhost:8001/api'
 });
 
 export interface UsageData {
@@ -65,6 +65,40 @@ export interface BehaviorInsights {
     priority: string;
   }>;
   recommendations: string[];
+}
+
+export type RecommendationItem = string | {
+  type: string;
+  message: string;
+  priority: string;
+};
+
+export interface AddictionInsights {
+  status: string;
+  user_id: string;
+  risk_assessment: {
+    level: number;
+    label: string;
+    probability: number;
+    color: string;
+  };
+  insights: Array<{
+    icon: string;
+    message: string;
+    severity: string;
+    type: string;
+  }>;
+  recommendations: string[];
+  three_day_summary: {
+    day1: { date: string; total_minutes: number; risk_level: number };
+    day2: { date: string; total_minutes: number; risk_level: number };
+    day3: { date: string; total_minutes: number; risk_level: number };
+  };
+  trend: {
+    direction: string;
+    icon: string;
+    color: string;
+  };
 }
 
 class MLService {
@@ -159,7 +193,7 @@ class MLService {
     }
   }
 
-  async getRecommendations(): Promise<string[] | null> {
+  async getRecommendations(): Promise<RecommendationItem[] | null> {
     try {
       const response = await fetch(`${ML_API_BASE}/recommendations/${this.userId}`);
       
@@ -194,6 +228,21 @@ class MLService {
 
       const result = await response.json();
       return result.break_schedule;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async getAddictionInsights(): Promise<AddictionInsights | null> {
+    try {
+      const response = await fetch(`${ML_API_BASE}/addiction-insights/${this.userId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.status === 'success' ? result : null;
     } catch (error) {
       return null;
     }

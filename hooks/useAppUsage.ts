@@ -25,8 +25,16 @@ export const useAppUsage = () => {
 
   useEffect(() => {
     initializeData();
+    loadSavedLimit();
     RealTimeTracker.startTracking();
   }, []);
+
+  const loadSavedLimit = async () => {
+    const saved = await storage.get('dailyLimit');
+    if (saved) {
+      setDailyLimit(saved);
+    }
+  };
   
   useEffect(() => {
     if (!hasPermission || !useRealData) return;
@@ -125,8 +133,10 @@ export const useAppUsage = () => {
         
         // Initialize app entry
         if (!appUsage[packageName]) {
+          const displayName = appName || formatPackageName(packageName);
+          console.log(`📱 App: ${packageName} -> ${displayName} (fromNative: ${appName ? 'yes' : 'no'})`);
           appUsage[packageName] = {
-            name: appName || formatPackageName(packageName),
+            name: displayName,
             timeSpent: 0,
             packageName: packageName,
           };
@@ -193,6 +203,8 @@ export const useAppUsage = () => {
   const updateLimit = async (newLimit: number) => {
     setDailyLimit(newLimit);
     await storage.set('dailyLimit', newLimit);
+    // Force re-render by updating timestamp
+    setApps([...apps]);
   };
 
   const addPoints = async (amount: number) => {
@@ -213,8 +225,73 @@ export const useAppUsage = () => {
 };
 
 const formatPackageName = (packageName: string): string => {
+  // Smart extraction of app name from package
+  // Examples: in.star.hotstar -> Hotstar
+  //           com.android.calculator -> Calculator
+  //           com.google.android.calendar -> Calendar
+  
   const parts = packageName.split('.');
   if (parts.length === 0) return packageName;
+  
+  // Known app names that need special handling
+  const knownApps: { [key: string]: string } = {
+    'hotstar': 'Hotstar',
+    'alarmclock': 'Alarm Clock',
+    'pdfreader': 'PDF Reader',
+    'pdfviewer': 'PDF Viewer',
+    'cloudmessaging': 'Cloud Messaging',
+    'phonepe': 'PhonePe',
+    'paytm': 'Paytm',
+    'myntra': 'Myntra',
+    'flipkart': 'Flipkart',
+    'swiggy': 'Swiggy',
+    'zomato': 'Zomato',
+    'weather': 'Weather',
+    'weather2': 'Weather',
+    'calculator': 'Calculator',
+    'calendar': 'Calendar',
+    'photos': 'Photos',
+    'contacts': 'Contacts',
+    'dialer': 'Dialer',
+    'clock': 'Clock',
+    'gallery': 'Gallery',
+    'camera': 'Camera',
+    'maps': 'Maps',
+    'settings': 'Settings',
+    'launcher': 'Launcher',
+    'phonemanager': 'Phone Manager',
+    'gamecenter': 'Game Center',
+    'homeessentials': 'Home Essentials',
+    'netmirror': 'Net Mirror',
+    'naviapp': 'Navigation',
+    'jioplay': 'Jio Play',
+    'myjio': 'My Jio',
+  };
+  
+  // Find the most meaningful part (skip common suffixes)
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i].toLowerCase();
+    
+    // Check if it's a known app
+    if (knownApps[part]) {
+      return knownApps[part];
+    }
+    
+    // Handle camelCase names (e.g., "startv", "hotstar")
+    if (part.length > 4 && /[A-Z]/.test(parts[i])) {
+      const camelCase = parts[i];
+      return camelCase.charAt(0).toUpperCase() + camelCase.slice(1);
+    }
+    
+    // Skip common suffixes
+    if (!['app', 'android', 'mobile', 'client', 'application', 'star', 'meesho', 'supply'].includes(part) && part.length > 2) {
+      const name = parts[i];
+      // Capitalize properly
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+  }
+  
+  // Fallback: use last part
   const name = parts[parts.length - 1];
   return name.charAt(0).toUpperCase() + name.slice(1);
 };

@@ -252,3 +252,4 @@ Your app now displays proper, readable app names for all applications! 🎉
 
 
 
+

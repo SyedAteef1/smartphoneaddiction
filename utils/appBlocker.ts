@@ -2,7 +2,7 @@ import { Alert, Platform, NativeModules } from 'react-native';
 import { storage } from './storage';
 import * as Speech from 'expo-speech';
 
-const { UsageStatsModule } = NativeModules;
+const { AppBlockerModule } = NativeModules;
 
 export const AppBlocker = {
   isBlocked: false,
@@ -33,7 +33,7 @@ export const AppBlocker = {
       ]
     );
 
-    if (Platform.OS === 'android' && UsageStatsModule) {
+    if (Platform.OS === 'android' && AppBlockerModule) {
       try {
         // Block major time-wasting apps
         const appsToBlock = [
@@ -53,8 +53,10 @@ export const AppBlocker = {
         AppBlocker.blockedApps = appsToBlock;
         
         // Start native blocking service
-        await UsageStatsModule.startAppBlocking(appsToBlock);
-        console.log('✅ App blocking activated for ' + appsToBlock.length + ' apps');
+        if (AppBlockerModule && AppBlockerModule.startBlockingService) {
+          await AppBlockerModule.startBlockingService(appsToBlock);
+          console.log('✅ App blocking activated for ' + appsToBlock.length + ' apps');
+        }
       } catch (e) {
         console.error('Failed to block apps:', e);
       }
@@ -67,10 +69,12 @@ export const AppBlocker = {
     AppBlocker.blockedApps = [];
     
     // Stop native blocking service
-    if (Platform.OS === 'android' && UsageStatsModule) {
+    if (Platform.OS === 'android' && AppBlockerModule) {
       try {
-        await UsageStatsModule.stopAppBlocking();
-        console.log('✅ App blocking deactivated');
+        if (AppBlockerModule.stopBlockingService) {
+          await AppBlockerModule.stopBlockingService();
+          console.log('✅ App blocking deactivated');
+        }
       } catch (e) {
         console.error('Failed to stop blocking:', e);
       }

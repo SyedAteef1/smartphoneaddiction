@@ -8,7 +8,15 @@ interface ScreenTimeCircleProps {
 }
 
 export const ScreenTimeCircle: React.FC<ScreenTimeCircleProps> = ({ timeSpent, limit }) => {
-  const percentage = Math.min((timeSpent / limit) * 100, 100);
+  const [displayTime, setDisplayTime] = React.useState(timeSpent);
+  const [displayLimit, setDisplayLimit] = React.useState(limit);
+
+  React.useEffect(() => {
+    setDisplayTime(timeSpent);
+    setDisplayLimit(limit);
+  }, [timeSpent, limit]);
+
+  const percentage = (displayTime / displayLimit) * 100;
   const radius = 80;
   const strokeWidth = 12;
   const circumference = 2 * Math.PI * radius;
@@ -25,9 +33,9 @@ export const ScreenTimeCircle: React.FC<ScreenTimeCircleProps> = ({ timeSpent, l
       <View style={styles.circle}>
         <View style={[styles.progressRing, { borderColor: getColor(), borderWidth: strokeWidth }]}>
           <View style={styles.innerCircle}>
-            <Text style={styles.timeText}>{timeSpent}</Text>
+            <Text style={styles.timeText}>{displayTime}</Text>
             <Text style={styles.minutesText}>minutes</Text>
-            <Text style={styles.limitText}>of {limit}m</Text>
+            <Text style={styles.limitText}>of {displayLimit}m</Text>
           </View>
         </View>
       </View>

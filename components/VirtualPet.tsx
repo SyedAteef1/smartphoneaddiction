@@ -11,7 +11,12 @@ interface VirtualPetProps {
 export const VirtualPet: React.FC<VirtualPetProps> = ({ timeSpent, limit }) => {
   const [bounceAnim] = useState(new Animated.Value(0));
   const [lastMood, setLastMood] = useState('');
+  const [currentPercentage, setCurrentPercentage] = useState(0);
   const percentage = (timeSpent / limit) * 100;
+
+  useEffect(() => {
+    setCurrentPercentage(percentage);
+  }, [timeSpent, limit, percentage]);
 
   useEffect(() => {
     Animated.loop(

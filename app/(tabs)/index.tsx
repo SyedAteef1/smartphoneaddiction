@@ -6,7 +6,11 @@ import { BreakTimer } from '../../components/BreakTimer';
 import { LiveUsageIndicator } from '../../components/LiveUsageIndicator';
 import { MLInsights } from '../../components/MLInsights';
 import { MLStatusIndicator } from '../../components/MLStatusIndicator';
-import { PermissionRequest } from '../../components/PermissionRequest';
+import { LocalMLInsights } from '../../components/LocalMLInsights';
+import { AddictionInsights } from '../../components/AddictionInsights';
+import { TestConnection } from '../../components/TestConnection';
+import { MLInsightsDashboard } from '../../components/MLInsightsDashboard';
+
 import { RealTimeWidget } from '../../components/RealTimeWidget';
 import { ScreenTimeCircle } from '../../components/ScreenTimeCircle';
 import { Card } from '../../components/ui/Card';
@@ -14,6 +18,7 @@ import { VirtualPet } from '../../components/VirtualPet';
 import { Colors } from '../../constants/theme';
 import { useAppUsage } from '../../hooks/useAppUsage';
 import { useMLInsights } from '../../hooks/useMLInsights';
+import { useLocalML } from '../../hooks/useLocalML';
 import { useRealTimeUsage } from '../../hooks/useRealTimeUsage';
 import { storage } from '../../utils/storage';
 import { VoiceNotifications } from '../../utils/voiceNotifications';
@@ -24,11 +29,12 @@ import { useVoicePopup } from '../../hooks/useVoicePopup';
 
 export default function Dashboard() {
   const [showBreak, setShowBreak] = useState(false);
-  const [showPermission, setShowPermission] = useState(false);
   const [showMLInsights, setShowMLInsights] = useState(false);
+  const [showMLDashboard, setShowMLDashboard] = useState(false);
   const { popup, showSuccess, showWarning, hidePopup } = useVoicePopup();
   const { totalTime, dailyLimit, points, hasPermission, requestPermission, useRealData } = useAppUsage();
   const { logUsage, predictions, fetchPredictions } = useMLInsights();
+  const { predictions: localML, isAnalyzing, confidence } = useLocalML(totalTime, dailyLimit);
 
   // Stop voice when leaving dashboard
   useEffect(() => {
@@ -48,20 +54,21 @@ export default function Dashboard() {
   } = useRealTimeUsage();
 
   useEffect(() => {
-    checkPermissionStatus();
     const initVoice = async () => {
-      const childName = await storage.get('childName') || 'Champion';
-      
-      // Check if first time opening app
-      const isFirstTime = await storage.get('isFirstTime');
-      if (isFirstTime === null || isFirstTime === true) {
-        await storage.set('isFirstTime', false);
-        const welcomeMsg = `Welcome to Screen Time Tracker! I'm here to help you build healthy digital habits. Let's get started, ${childName}!`;
-        await VoiceNotifications.speak(welcomeMsg, 'normal');
-        await VoiceNotifications.showNotification('👋 Welcome!', welcomeMsg);
-      } else {
-        await VoiceNotifications.onMorningGreeting(childName);
-        await VoiceNotifications.onEveningReminder();
+      try {
+        const childName = await storage.get('childName') || 'Champion';
+        const isFirstTime = await storage.get('isFirstTime');
+        if (isFirstTime === null || isFirstTime === true) {
+          await storage.set('isFirstTime', false);
+          const welcomeMsg = `Welcome to Screen Time Tracker! I'm here to help you build healthy digital habits. Let's get started, ${childName}!`;
+          await VoiceNotifications.speak(welcomeMsg, 'normal');
+          await VoiceNotifications.showNotification('👋 Welcome!', welcomeMsg);
+        } else {
+          await VoiceNotifications.onMorningGreeting(childName);
+          await VoiceNotifications.onEveningReminder();
+        }
+      } catch (e) {
+        console.log('Voice init skipped:', e);
       }
     };
     initVoice();
@@ -98,18 +105,7 @@ export default function Dashboard() {
     }
   }, [Math.floor(currentTotalTime / 5), logUsage]); // Log every 5 minutes of usage
 
-  const checkPermissionStatus = async () => {
-    const dismissed = await storage.get('permissionDismissed');
-    if (Platform.OS === 'android' && !dismissed && !hasPermission) {
-      setShowPermission(true);
-    }
-  };
 
-  const handlePermissionGranted = async () => {
-    await storage.set('permissionDismissed', true);
-    setShowPermission(false);
-    await VoiceNotifications.speak('Permission granted! You can now track real usage data.');
-  };
   const currentTotalTime = totalTime;
   const percentage = (currentTotalTime / dailyLimit) * 100;
   
@@ -129,20 +125,26 @@ export default function Dashboard() {
 
   // Check usage and trigger voice + notifications
   useEffect(() => {
-    if (currentTotalTime > 0) {
-      VoiceNotifications.checkAndNotify(currentTotalTime, dailyLimit);
-      
-      // Show status bar reminder every 30 mins
-      const lastReminder = Math.floor(currentTotalTime / 30);
-      const currentReminder = Math.floor(currentTotalTime / 30);
-      if (lastReminder !== currentReminder && currentTotalTime % 30 === 0) {
-        const remaining = Math.max(0, dailyLimit - currentTotalTime);
-        VoiceNotifications.showNotification(
-          '⏰ Screen Time Reminder',
-          `You've used ${currentTotalTime} mins. ${remaining} mins remaining.`
-        );
+    const checkNotifications = async () => {
+      try {
+        if (currentTotalTime > 0) {
+          await VoiceNotifications.checkAndNotify(currentTotalTime, dailyLimit);
+          
+          const lastReminder = Math.floor(currentTotalTime / 30);
+          const currentReminder = Math.floor(currentTotalTime / 30);
+          if (lastReminder !== currentReminder && currentTotalTime % 30 === 0) {
+            const remaining = Math.max(0, dailyLimit - currentTotalTime);
+            await VoiceNotifications.showNotification(
+              '⏰ Screen Time Reminder',
+              `You've used ${currentTotalTime} mins. ${remaining} mins remaining.`
+            );
+          }
+        }
+      } catch (e) {
+        console.log('Notification check skipped');
       }
-    }
+    };
+    checkNotifications();
   }, [currentTotalTime, dailyLimit]);
 
   const getStatusMessage = () => {
@@ -172,27 +174,7 @@ export default function Dashboard() {
         </View>
       </View>
 
-      {!hasPermission && (
-        <TouchableOpacity style={styles.permissionBanner} onPress={requestPermission}>
-          <Ionicons name="shield-checkmark" size={24} color="#fff" />
-          <View style={styles.permissionText}>
-            <Text style={styles.permissionTitle}>Enable Real Tracking</Text>
-            <Text style={styles.permissionSubtitle}>Tap to grant usage access</Text>
-          </View>
-        </TouchableOpacity>
-      )}
-
-      {useRealData && (
-        <View style={styles.realDataBadge}>
-          <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
-          <Text style={styles.realDataText}>Live Data Active</Text>
-        </View>
-      )}
-
-      {showPermission && (
-        <PermissionRequest onPermissionGranted={handlePermissionGranted} />
-      )}
-
+      {/* ML Backend status */}
       <MLStatusIndicator 
         isConnected={predictions !== null} 
         onRetry={fetchPredictions}
@@ -202,32 +184,29 @@ export default function Dashboard() {
       <LiveUsageIndicator />
 
       <TouchableOpacity onPress={async () => {
-        const petMood = currentTotalTime < dailyLimit * 0.5 ? 'happy' : 
-                        currentTotalTime < dailyLimit * 0.8 ? 'okay' : 
-                        currentTotalTime < dailyLimit ? 'worried' : 'sad';
-        await VoiceNotifications.onPetInteraction(petMood);
+        try {
+          const petMood = currentTotalTime < dailyLimit * 0.5 ? 'happy' : 
+                          currentTotalTime < dailyLimit * 0.8 ? 'okay' : 
+                          currentTotalTime < dailyLimit ? 'worried' : 'sad';
+          await VoiceNotifications.onPetInteraction(petMood);
+        } catch (e) {
+          console.log('Pet interaction skipped');
+        }
       }}>
         <Card style={styles.petCard}>
           <VirtualPet timeSpent={currentTotalTime} limit={dailyLimit} />
         </Card>
       </TouchableOpacity>
 
-      {/* Live Tracking Indicator */}
-      {useRealData && hasPermission && (
-        <View style={styles.liveTrackingBadge}>
-          <View style={styles.pulseDot} />
-          <Ionicons name="pulse" size={16} color={Colors.success} />
-          <Text style={styles.liveTrackingText}>
-            LIVE TRACKING • Updated {lastUpdateTime.toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit',
-              second: '2-digit'
-            })}
-          </Text>
-        </View>
-      )}
 
-      <TouchableOpacity onPress={speakScreenTimeStatus}>
+
+      <TouchableOpacity onPress={async () => {
+        try {
+          await speakScreenTimeStatus();
+        } catch (e) {
+          console.log('Voice skipped');
+        }
+      }}>
         <Card style={styles.mainCard}>
           <Text style={styles.cardTitle}>Today's Screen Time</Text>
           <Text style={styles.cardSubtitle}>
@@ -259,6 +238,13 @@ export default function Dashboard() {
         </View>
       )}
 
+      {/* Local ML Insights */}
+      <LocalMLInsights 
+        predictions={localML} 
+        isAnalyzing={isAnalyzing} 
+        confidence={confidence} 
+      />
+
       <Card style={styles.tipsCard}>
         <View style={styles.tipsHeader}>
           <Ionicons name="bulb" size={24} color={Colors.warning} />
@@ -269,46 +255,63 @@ export default function Dashboard() {
         <Text style={styles.tipText}>• Play outside for 30 minutes today</Text>
       </Card>
 
-      <View style={styles.actionButtons}>
-        <TouchableOpacity style={styles.breakButton} onPress={async () => {
+      <TouchableOpacity 
+        style={styles.analyzeButton} 
+        onPress={() => setShowMLDashboard(true)}
+      >
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.analyzeGradient}
+        >
+          <Ionicons name="analytics" size={28} color="#fff" />
+          <Text style={styles.analyzeText}>ML Insights & Analytics</Text>
+          <Ionicons name="arrow-forward" size={20} color="#fff" />
+        </LinearGradient>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={styles.breakButtonFull} 
+        onPress={async () => {
+          try {
+            await VoiceNotifications.onBreakStart(5);
+          } catch (e) {
+            console.log('Voice skipped');
+          }
           setShowBreak(true);
-          await VoiceNotifications.onBreakStart(5);
-          showSuccess('Break Time!', 'Great choice! Rest your eyes and stretch.');
-        }}>
-          <Ionicons name="pause-circle" size={24} color="#fff" />
-          <Text style={styles.breakButtonText}>Take a Break</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.mlButton} onPress={() => setShowMLInsights(true)}>
-          <Ionicons name="analytics" size={24} color="#fff" />
-          <Text style={styles.mlButtonText}>AI Insights</Text>
-        </TouchableOpacity>
-      </View>
+        }}
+      >
+        <Ionicons name="pause-circle" size={24} color="#fff" />
+        <Text style={styles.breakButtonText}>Take a Break</Text>
+      </TouchableOpacity>
       
       <BreakTimer visible={showBreak} onClose={() => setShowBreak(false)} />
       <VoicePopup {...popup} onClose={hidePopup} />
       
       <Modal 
-        visible={showMLInsights} 
+        visible={showMLDashboard} 
         animationType="slide" 
         presentationStyle="pageSheet"
-        onRequestClose={() => {
-          VoiceNotifications.stopSpeaking();
-          setShowMLInsights(false);
-        }}
+        onRequestClose={() => setShowMLDashboard(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>AI-Powered Insights</Text>
-            <TouchableOpacity onPress={() => {
-              VoiceNotifications.stopSpeaking();
-              setShowMLInsights(false);
-            }}>
-              <Ionicons name="close" size={24} color={Colors.text} />
-            </TouchableOpacity>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleContainer}>
+                <Ionicons name="analytics" size={24} color="#fff" />
+                <Text style={styles.modalTitle}>ML Insights</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowMLDashboard(false)}>
+                <Ionicons name="close-circle" size={28} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <MLInsightsDashboard />
           </View>
-          <MLInsights />
-        </View>
+        </LinearGradient>
       </Modal>
     </ScrollView>
     </LinearGradient>
@@ -455,14 +458,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     lineHeight: 20,
   },
-  breakButton: {
-    flex: 1,
+  breakButtonFull: {
     flexDirection: 'row',
     backgroundColor: Colors.primary,
     padding: 18,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    marginHorizontal: 20,
+    marginBottom: 30,
     shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -475,48 +479,30 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 30,
-    gap: 12,
-  },
-  mlButton: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#9C27B0',
-    padding: 18,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#9C27B0',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  mlButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
   modalContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: 'transparent',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingTop: 50,
+  },
+  modalTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.text,
+    color: '#fff',
+  },
+  modalContent: {
+    flex: 1,
+    padding: 20,
   },
   permissionBanner: {
     flexDirection: 'row',
@@ -567,5 +553,29 @@ const styles = StyleSheet.create({
   widgetContainer: {
     marginHorizontal: 20,
     marginBottom: 20,
+  },
+  analyzeButton: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  analyzeGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    gap: 12,
+  },
+  analyzeText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
   },
 });

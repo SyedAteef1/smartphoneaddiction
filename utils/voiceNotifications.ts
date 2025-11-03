@@ -36,12 +36,12 @@ export const VoiceNotifications = {
 
   // Show notification (works even when app is closed)
   showNotification: async (title: string, message: string) => {
-    if (Platform.OS === 'android' && NotificationModule) {
-      try {
+    try {
+      if (Platform.OS === 'android' && NotificationModule) {
         await NotificationModule.showNotification(title, message);
-      } catch (e) {
-        console.error('Notification error:', e);
       }
+    } catch (e) {
+      // Silently fail if notification module not available
     }
   },
 
@@ -73,23 +73,28 @@ export const VoiceNotifications = {
   // Usage-based notifications
   checkAndNotify: async (timeSpent: number, limit: number) => {
     const percentage = (timeSpent / limit) * 100;
+    const percentRounded = Math.round(percentage);
     
     if (percentage >= 50 && percentage < 60 && VoiceNotifications.shouldNotify('50percent', 300000)) {
-      const msg = 'You have used half of your daily screen time. Great job staying aware!';
+      const msg = `You have used ${percentRounded}% of your daily screen time. Great job staying aware!`;
       await VoiceNotifications.speak(msg, 'normal');
       await VoiceNotifications.showNotification('Screen Time Alert', msg);
     } else if (percentage >= 75 && percentage < 85 && VoiceNotifications.shouldNotify('75percent', 300000)) {
-      const msg = 'You have used 75% of your daily limit. Consider wrapping up soon.';
+      const msg = `You have used ${percentRounded}% of your daily limit. Consider wrapping up soon.`;
       await VoiceNotifications.speak(msg, 'normal');
       await VoiceNotifications.showNotification('Screen Time Warning', msg);
     } else if (percentage >= 90 && percentage < 100 && VoiceNotifications.shouldNotify('90percent', 180000)) {
-      const msg = 'Warning! Only 10% of your screen time remaining. Please finish your activities.';
+      const remaining = Math.round(100 - percentage);
+      const msg = `⚠️ Alert! You have used ${percentRounded}% of your screen time. Only ${remaining}% remaining. Please finish your activities.`;
       await VoiceNotifications.speak(msg, 'high');
       await VoiceNotifications.showNotification('⚠️ Screen Time Alert', msg);
     } else if (percentage >= 100 && VoiceNotifications.shouldNotify('100percent', 300000)) {
-      const msg = 'Daily screen time limit reached! Time to take a break and do something else.';
+      const exceeded = Math.round(percentage - 100);
+      const msg = exceeded > 0 
+        ? `🚫 You have exceeded your limit by ${exceeded}%! Time to take a break and do something else.`
+        : `🚫 Daily screen time limit reached (100%)! Time to take a break and do something else.`;
       await VoiceNotifications.speak(msg, 'high');
-      await VoiceNotifications.showNotification('🚫 Limit Reached', msg);
+      await VoiceNotifications.showNotification('🚫 Limit Exceeded', msg);
       await VoiceNotifications.alertParent(timeSpent, limit);
     }
   },

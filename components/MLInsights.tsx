@@ -223,19 +223,26 @@ export const MLInsights: React.FC = () => {
             <Text style={styles.cardTitle}>AI Recommendations</Text>
           </View>
           
-          {recommendations.slice(0, 3).map((recommendation, index) => (
-            <TouchableOpacity key={index} style={styles.recommendationItem}>
-              <Ionicons name="checkmark-circle-outline" size={16} color={Colors.success} />
-              <Text style={styles.recommendationText}>{recommendation}</Text>
-            </TouchableOpacity>
-          ))}
+          {recommendations.slice(0, 3).map((recommendation, index) => {
+            // Handle both string and object formats
+            const recommendationText = typeof recommendation === 'string' 
+              ? recommendation 
+              : recommendation.message || JSON.stringify(recommendation);
+            
+            return (
+              <TouchableOpacity key={index} style={styles.recommendationItem}>
+                <Ionicons name="checkmark-circle-outline" size={16} color={Colors.success} />
+                <Text style={styles.recommendationText}>{recommendationText}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </Card>
       )}
 
       {isLoading && (
         <Card style={styles.loadingCard}>
           <Ionicons name="refresh" size={24} color={Colors.primary} />
-          <Text style={styles.loadingText}>Analyzing usage patterns...</Text>
+          <Text style={styles.loadingText}>Loading AI insights...</Text>
         </Card>
       )}
     </ScrollView>

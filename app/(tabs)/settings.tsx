@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch
 import { Colors } from '../../constants/theme';
 import { Card } from '../../components/ui/Card';
 import { ParentSetup } from '../../components/ParentSetup';
-import { ScreenTimeImport } from '../../components/ScreenTimeImport';
+
 import { BackButton } from '../../components/BackButton';
 import { useAppUsage } from '../../hooks/useAppUsage';
 import { VoiceNotifications } from '../../utils/voiceNotifications';
@@ -18,7 +18,6 @@ export default function Settings() {
   const [newLimit, setNewLimit] = useState('');
   const [notifications, setNotifications] = useState(true);
   const [breakReminders, setBreakReminders] = useState(true);
-  const [showImport, setShowImport] = useState(false);
   const [parentPhone, setParentPhone] = useState('');
   const { popup, showSuccess, showInfo, hidePopup } = useVoicePopup();
 
@@ -41,12 +40,12 @@ export default function Settings() {
 
   const handleUpdateLimit = async () => {
     const limit = parseInt(newLimit);
-    if (limit > 0 && limit <= 480) {
+    if (limit > 0 && limit <= 1000) {
       await updateLimit(limit);
       await VoiceNotifications.onLimitUpdated(limit);
       showSuccess('Limit Updated!', `Daily limit set to ${limit} minutes`);
     } else {
-      Alert.alert('Error', 'Please enter a valid limit (1-480 minutes)');
+      Alert.alert('Error', 'Please enter a valid limit (1-1000 minutes)');
     }
   };
 
@@ -70,7 +69,7 @@ export default function Settings() {
 
       <Card style={styles.card}>
         <Text style={styles.sectionTitle}>Daily Limit</Text>
-        <Text style={styles.description}>Set your daily screen time goal (minutes)</Text>
+        <Text style={styles.description}>Set your daily screen time goal (1-1000 minutes)</Text>
         <View style={styles.inputRow}>
           <TextInput
             style={styles.input}
@@ -112,17 +111,7 @@ export default function Settings() {
         </View>
       </Card>
 
-      <Card style={styles.card}>
-        <Text style={styles.sectionTitle}>Import Screen Time</Text>
-        <Text style={styles.description}>Import your actual usage from {Platform.OS === 'ios' ? 'iOS Screen Time' : 'Android Digital Wellbeing'}</Text>
-        <TouchableOpacity 
-          style={styles.importButton}
-          onPress={() => setShowImport(true)}
-        >
-          <Ionicons name="download" size={20} color="#fff" />
-          <Text style={styles.importButtonText}>Import from {Platform.OS === 'ios' ? 'iOS' : 'Android'}</Text>
-        </TouchableOpacity>
-      </Card>
+
 
       <ParentSetup />
 
@@ -162,30 +151,7 @@ export default function Settings() {
         </TouchableOpacity>
       </Card>
 
-      <Card style={styles.card}>
-        <Text style={styles.sectionTitle}>App Blocking</Text>
-        <Text style={styles.description}>Manually block distracting apps for focused time</Text>
-        <TouchableOpacity 
-          style={styles.blockButton}
-          onPress={async () => {
-            await AppBlocker.manualBlock(30);
-            await VoiceNotifications.onAppBlocked(30);
-          }}
-        >
-          <Ionicons name="lock-closed" size={20} color="#fff" />
-          <Text style={styles.blockButtonText}>Block for 30 min</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.blockButton, styles.blockButton60]}
-          onPress={async () => {
-            await AppBlocker.manualBlock(60);
-            await VoiceNotifications.onAppBlocked(60);
-          }}
-        >
-          <Ionicons name="lock-closed" size={20} color="#fff" />
-          <Text style={styles.blockButtonText}>Block for 1 hour</Text>
-        </TouchableOpacity>
-      </Card>
+
 
       <Card style={styles.card}>
         <Text style={styles.sectionTitle}>Parent SMS Alerts</Text>
@@ -222,36 +188,7 @@ export default function Settings() {
 
       <BackButton />
 
-      <Modal 
-        visible={showImport} 
-        animationType="slide" 
-        presentationStyle="pageSheet"
-        onRequestClose={() => {
-          VoiceNotifications.stopSpeaking();
-          setShowImport(false);
-        }}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Import Screen Time</Text>
-            <TouchableOpacity onPress={() => {
-              VoiceNotifications.stopSpeaking();
-              setShowImport(false);
-            }}>
-              <Ionicons name="close" size={28} color={Colors.text} />
-            </TouchableOpacity>
-          </View>
-          <ScrollView>
-            <ScreenTimeImport 
-              onImport={(minutes, apps) => {
-                importScreenTime(minutes, apps);
-                VoiceNotifications.stopSpeaking();
-                setShowImport(false);
-              }}
-            />
-          </ScrollView>
-        </View>
-      </Modal>
+
       <VoicePopup {...popup} onClose={hidePopup} />
     </ScrollView>
   );
