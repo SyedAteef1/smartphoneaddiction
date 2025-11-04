@@ -70,25 +70,31 @@ export const VoiceNotifications = {
     return true;
   },
 
+  // Reset notification tracking when limit changes
+  resetNotifications: () => {
+    lastNotificationTime = {};
+  },
+
   // Usage-based notifications
   checkAndNotify: async (timeSpent: number, limit: number) => {
     const percentage = (timeSpent / limit) * 100;
     const percentRounded = Math.round(percentage);
+    const key = `${limit}_${Math.floor(percentage / 10) * 10}`;
     
-    if (percentage >= 50 && percentage < 60 && VoiceNotifications.shouldNotify('50percent', 300000)) {
+    if (percentage >= 50 && percentage < 60 && VoiceNotifications.shouldNotify(`50_${limit}`, 300000)) {
       const msg = `You have used ${percentRounded}% of your daily screen time. Great job staying aware!`;
       await VoiceNotifications.speak(msg, 'normal');
       await VoiceNotifications.showNotification('Screen Time Alert', msg);
-    } else if (percentage >= 75 && percentage < 85 && VoiceNotifications.shouldNotify('75percent', 300000)) {
+    } else if (percentage >= 75 && percentage < 85 && VoiceNotifications.shouldNotify(`75_${limit}`, 300000)) {
       const msg = `You have used ${percentRounded}% of your daily limit. Consider wrapping up soon.`;
       await VoiceNotifications.speak(msg, 'normal');
       await VoiceNotifications.showNotification('Screen Time Warning', msg);
-    } else if (percentage >= 90 && percentage < 100 && VoiceNotifications.shouldNotify('90percent', 180000)) {
+    } else if (percentage >= 90 && percentage < 100 && VoiceNotifications.shouldNotify(`90_${limit}`, 180000)) {
       const remaining = Math.round(100 - percentage);
       const msg = `⚠️ Alert! You have used ${percentRounded}% of your screen time. Only ${remaining}% remaining. Please finish your activities.`;
       await VoiceNotifications.speak(msg, 'high');
       await VoiceNotifications.showNotification('⚠️ Screen Time Alert', msg);
-    } else if (percentage >= 100 && VoiceNotifications.shouldNotify('100percent', 300000)) {
+    } else if (percentage >= 100 && VoiceNotifications.shouldNotify(`100_${limit}`, 300000)) {
       const exceeded = Math.round(percentage - 100);
       const msg = exceeded > 0 
         ? `🚫 You have exceeded your limit by ${exceeded}%! Time to take a break and do something else.`

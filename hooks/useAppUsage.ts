@@ -39,11 +39,11 @@ export const useAppUsage = () => {
   useEffect(() => {
     if (!hasPermission || !useRealData) return;
     
-    console.log('🔄 Setting up auto-refresh every 10 seconds');
+    console.log('🔄 Setting up auto-refresh every 5 seconds');
     const interval = setInterval(() => {
       console.log('🔄 Auto-refreshing usage data...');
       fetchRealUsage();
-    }, 10000);
+    }, 5000);
     
     return () => {
       console.log('🔄 Clearing auto-refresh interval');
@@ -195,6 +195,10 @@ export const useAppUsage = () => {
   };
 
   const resetDaily = async () => {
+    // Save today's usage as previous before resetting
+    const usage = apps.slice(0, 5).map(a => ({ name: a.name, time: a.timeSpent }));
+    await storage.set('previousDayUsage', usage);
+    
     await RealTimeTracker.resetDaily();
     setApps([]);
     setTotalTime(0);
@@ -203,6 +207,7 @@ export const useAppUsage = () => {
   const updateLimit = async (newLimit: number) => {
     setDailyLimit(newLimit);
     await storage.set('dailyLimit', newLimit);
+    VoiceNotifications.resetNotifications();
     // Force re-render by updating timestamp
     setApps([...apps]);
   };

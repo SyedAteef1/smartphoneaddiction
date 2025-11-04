@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from './ui/Card';
 import { Colors } from '../constants/theme';
 import { useAppUsage } from '../hooks/useAppUsage';
+import { storage } from '../utils/storage';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -13,10 +14,24 @@ export const MLInsightsDashboard = () => {
   const [riskLevel, setRiskLevel] = useState(0);
   const [insights, setInsights] = useState<string[]>([]);
   const [topApps, setTopApps] = useState<{name: string; time: number}[]>([]);
+  const [previousUsage, setPreviousUsage] = useState<{name: string; time: number}[]>([]);
 
   useEffect(() => {
+    loadPreviousUsage();
     analyzeUsage();
   }, [apps, totalTime]);
+
+  const loadPreviousUsage = async () => {
+    const saved = await storage.get('previousDayUsage');
+    if (saved) {
+      setPreviousUsage(saved);
+    }
+  };
+
+  const saveTodayUsage = async () => {
+    const usage = apps.slice(0, 5).map(a => ({ name: a.name, time: a.timeSpent }));
+    await storage.set('previousDayUsage', usage);
+  };
 
   const analyzeUsage = () => {
     // Calculate risk level
@@ -119,7 +134,7 @@ export const MLInsightsDashboard = () => {
           <Text style={styles.chartTitle}>📈 App Usage Breakdown</Text>
           <BarChart
             data={{
-              labels: topApps.map(a => a.name.substring(0, 8)),
+              labels: topApps.map(a => a.name.charAt(0).toUpperCase()),
               datasets: [{ data: topApps.map(a => a.time) }]
             }}
             width={screenWidth - 60}
@@ -129,6 +144,38 @@ export const MLInsightsDashboard = () => {
             chartConfig={chartConfig}
             style={styles.chart}
             showValuesOnTopOfBars
+          />
+        </Card>
+      )}
+
+      {/* Usage Comparison Chart */}
+      {previousUsage.length > 0 && apps.length > 0 && (
+        <Card style={styles.chartCard}>
+          <Text style={styles.chartTitle}>📊 Today vs Yesterday</Text>
+          <BarChart
+            data={{
+              labels: topApps.slice(0, 3).map(a => a.name.charAt(0).toUpperCase()),
+              datasets: [
+                {
+                  data: topApps.slice(0, 3).map(app => {
+                    const prev = previousUsage.find(p => p.name === app.name);
+                    return prev ? prev.time : 0;
+                  }),
+                  color: (opacity = 1) => `rgba(255, 152, 0, ${opacity})`,
+                },
+                {
+                  data: topApps.slice(0, 3).map(a => a.time),
+                  color: (opacity = 1) => `rgba(102, 126, 234, ${opacity})`,
+                }
+              ],
+              legend: ['Yesterday', 'Today']
+            }}
+            width={screenWidth - 60}
+            height={220}
+            yAxisLabel=""
+            yAxisSuffix="m"
+            chartConfig={chartConfig}
+            style={styles.chart}
           />
         </Card>
       )}

@@ -174,12 +174,6 @@ export default function Dashboard() {
         </View>
       </View>
 
-      {/* ML Backend status */}
-      <MLStatusIndicator 
-        isConnected={predictions !== null} 
-        onRetry={fetchPredictions}
-      />
-
       <BlockStatus />
       <LiveUsageIndicator />
 
